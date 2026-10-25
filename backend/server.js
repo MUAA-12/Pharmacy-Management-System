@@ -46,7 +46,10 @@ app.get('/api/health', async (req, res) => {
   res.json({
     status: dbStatus.connected ? 'online' : 'degraded',
     timestamp: new Date().toISOString(),
-    database: { connected: dbStatus.connected }
+    database: {
+       connected: dbStatus.connected,
+       error: dbStatus.connected ? null : dbStatus.message
+      }
   });
 });
 
