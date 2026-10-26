@@ -1,17 +1,36 @@
+
 /**
  * API Service Client for PharmaReserve REST API
  */
+
+import { supabase } from './supabaseClient';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 
 async function request(endpoint, options = {}) {
   const url = `${BASE_URL}${endpoint}`;
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers
-  };
 
   try {
+    // Get current Supabase login session
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      throw new Error('Unable to read login session');
+    }
+
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers
+    };
+
+    // Send access token to backend
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+
     const response = await fetch(url, {
       ...options,
       headers
@@ -20,17 +39,29 @@ async function request(endpoint, options = {}) {
     const data = await response.json();
 
     if (!response.ok) {
-      const error = new Error(data.message || `Request failed with status ${response.status}`);
+      const error = new Error(
+        data.error ||
+        data.message ||
+        `Request failed with status ${response.status}`
+      );
+
       error.status = response.status;
       error.data = data;
       throw error;
     }
 
     return data;
+
   } catch (err) {
-    if (err.name === 'TypeError' && err.message.includes('fetch')) {
-      throw new Error('Cannot connect to Backend Server. Please ensure backend is running at http://localhost:5000');
+    if (
+      err.name === 'TypeError' &&
+      err.message.includes('fetch')
+    ) {
+      throw new Error(
+        'Cannot connect to Backend Server. Please ensure backend is running.'
+      );
     }
+
     throw err;
   }
 }
@@ -39,53 +70,113 @@ async function request(endpoint, options = {}) {
 export const medicineApi = {
   getAll: (params = {}) => {
     const query = new URLSearchParams();
+
     if (params.search) query.append('search', params.search);
     if (params.category) query.append('category', params.category);
     if (params.availability) query.append('availability', params.availability);
+
     return request(`/medicines?${query.toString()}`);
   },
+
   getCategories: () => request('/medicines/categories'),
+
   getById: (id) => request(`/medicines/${id}`),
-  create: (data) => request('/medicines', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id, data) => request(`/medicines/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: (id) => request(`/medicines/${id}`, { method: 'DELETE' })
+
+  create: (data) =>
+    request('/medicines', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  update: (id, data) =>
+    request(`/medicines/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  delete: (id) =>
+    request(`/medicines/${id}`, {
+      method: 'DELETE'
+    })
 };
 
 // Customer Endpoints
 export const customerApi = {
   getAll: (params = {}) => {
     const query = new URLSearchParams();
+
     if (params.search) query.append('search', params.search);
+
     return request(`/customers?${query.toString()}`);
   },
+
   getById: (id) => request(`/customers/${id}`),
-  create: (data) => request('/customers', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id, data) => request(`/customers/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  delete: (id) => request(`/customers/${id}`, { method: 'DELETE' })
+
+  create: (data) =>
+    request('/customers', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  update: (id, data) =>
+    request(`/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    }),
+
+  delete: (id) =>
+    request(`/customers/${id}`, {
+      method: 'DELETE'
+    })
 };
 
 // Reservation Endpoints
 export const reservationApi = {
   getAll: (params = {}) => {
     const query = new URLSearchParams();
+
     if (params.status) query.append('status', params.status);
     if (params.search) query.append('search', params.search);
+
     return request(`/reservations?${query.toString()}`);
   },
+
   getById: (id) => request(`/reservations/${id}`),
-  create: (data) => request('/reservations', { method: 'POST', body: JSON.stringify(data) }),
-  cancel: (id) => request(`/reservations/${id}/cancel`, { method: 'PUT' }),
-  complete: (id) => request(`/reservations/${id}/complete`, { method: 'PUT' })
+
+  create: (data) =>
+    request('/reservations', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    }),
+
+  cancel: (id) =>
+    request(`/reservations/${id}/cancel`, {
+      method: 'PUT'
+    }),
+
+  complete: (id) =>
+    request(`/reservations/${id}/complete`, {
+      method: 'PUT'
+    })
 };
 
 // Report Endpoints
 export const reportApi = {
   getDashboard: () => request('/reports/dashboard'),
+
   getInventory: () => request('/reports/inventory'),
-  getLowStock: (threshold = 10) => request(`/reports/low-stock?threshold=${threshold}`),
-  getExpiry: (days = 90) => request(`/reports/expiry?days=${days}`),
-  getSalesByDate: () => request('/reports/sales-by-date'),
-  getTopMedicines: () => request('/reports/top-medicines')
+
+  getLowStock: (threshold = 10) =>
+    request(`/reports/low-stock?threshold=${threshold}`),
+
+  getExpiry: (days = 90) =>
+    request(`/reports/expiry?days=${days}`),
+
+  getSalesByDate: () =>
+    request('/reports/sales-by-date'),
+
+  getTopMedicines: () =>
+    request('/reports/top-medicines')
 };
 
 // System Health Endpoint

@@ -1,212 +1,366 @@
+
 const { pool } = require('../config/db');
-const { query, getConnection } = require('../config/pgAdapter');
 
 class MedicineService {
-  /**
-   * Fetch all medicines with optional filters for name, category, and availability
-   */
-  async getAllMedicines({ search = '', category = '', availability = 'all' } = {}) {
-    let sql = `
-      SELECT 
-        medicine_id,
-        name,
-        category,
-        CAST(unit_price AS DECIMAL(10,2)) AS unit_price,
-        stock_quantity,
-        DATE_FORMAT(expiry_date, '%Y-%m-%d') AS expiry_date,
-        CASE
-          WHEN expiry_date < CURRENT_DATE() THEN 'Expired'
-          WHEN expiry_date <= DATE_ADD(CURRENT_DATE(), INTERVAL 30 DAY) THEN 'Near Expiry'
-          WHEN stock_quantity <= 0 THEN 'Out of Stock'
-          WHEN stock_quantity <= 10 THEN 'Low Stock'
-          ELSE 'In Stock'
-        END AS status,
-        DATEDIFF(expiry_date, CURRENT_DATE()) AS days_until_expiry
-      FROM medicines
-      WHERE 1=1
-    `;
-    const params = [];
+  // Validate medicine ID before using it in SQL
+  validateMedicineId(medicineId) {
+    const id = Number(medicineId);
 
-    if (search && search.trim() !== '') {
-      sql += ` AND (name LIKE ? OR category LIKE ?)`;
-      params.push(`%${search.trim()}%`, `%${search.trim()}%`);
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      const error = new Error('Invalid medicine ID.');
+      error.statusCode = 400;
+      throw error;
     }
 
-    if (category && category.trim() !== '' && category.toLowerCase() !== 'all') {
-      sql += ` AND category = ?`;
-      params.push(category.trim());
-    }
-
-    if (availability === 'in_stock') {
-      sql += ` AND stock_quantity > 10 AND expiry_date >= CURRENT_DATE()`;
-    } else if (availability === 'low_stock') {
-      sql += ` AND stock_quantity > 0 AND stock_quantity <= 10 AND expiry_date >= CURRENT_DATE()`;
-    } else if (availability === 'out_of_stock') {
-      sql += ` AND stock_quantity <= 0`;
-    } else if (availability === 'expired') {
-      sql += ` AND expiry_date < CURRENT_DATE()`;
-    } else if (availability === 'near_expiry') {
-      sql += ` AND expiry_date >= CURRENT_DATE() AND expiry_date <= DATE_ADD(CURRENT_DATE(), INTERVAL 30 DAY)`;
-    }
-
-    sql += ` ORDER BY name ASC`;
-
-    const [rows] = await query(sql, params);
-    return rows;
+    return id;
   }
 
-  /**
-   * Get single medicine by ID
-   */
-  async getMedicineById(medicineId) {
-    const sql = `
-      SELECT 
-        medicine_id,
-        name,
-        category,
-        CAST(unit_price AS DECIMAL(10,2)) AS unit_price,
-        stock_quantity,
-        DATE_FORMAT(expiry_date, '%Y-%m-%d') AS expiry_date,
-        CASE
-          WHEN expiry_date < CURRENT_DATE() THEN 'Expired'
-          WHEN expiry_date <= DATE_ADD(CURRENT_DATE(), INTERVAL 30 DAY) THEN 'Near Expiry'
-          WHEN stock_quantity <= 0 THEN 'Out of Stock'
-          WHEN stock_quantity <= 10 THEN 'Low Stock'
-          ELSE 'In Stock'
-        END AS status,
-        DATEDIFF(expiry_date, CURRENT_DATE()) AS days_until_expiry
-      FROM medicines
-      WHERE medicine_id = ?
-    `;
-    const [rows] = await query(sql, [medicineId]);
-    return rows.length > 0 ? rows[0] : null;
-  }
+  // Validate medicine fields for create and update
+  validateMedicineData(data) {
+    const name = String(data.name || '').trim();
+    const category = String(data.category || 'General').trim();
 
-  /**
-   * Add a new medicine with validation
-   */
-  async createMedicine({ name, category, unit_price, stock_quantity, expiry_date }) {
-    if (!name || name.trim() === '') {
+    const price = Number(data.unit_price);
+    const stock = Number(data.stock_quantity);
+    const expiryDate = String(data.expiry_date || '').trim();
+
+    if (!name) {
       const error = new Error('Medicine name is required.');
       error.statusCode = 400;
       throw error;
     }
 
-    const price = parseFloat(unit_price);
-    if (isNaN(price) || price < 0) {
-      const error = new Error('Unit price must be a non-negative number.');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const stock = parseInt(stock_quantity, 10);
-    if (!Number.isSafeInteger(stock) || stock < 0 || (stock_quantity !== undefined && String(stock_quantity).trim() !== String(stock))) {
-      const error = new Error('Stock quantity must be a non-negative integer.');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    if (!expiry_date || isNaN(new Date(expiry_date).getTime())) {
-      const error = new Error('A valid expiry date (YYYY-MM-DD) is required.');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const sql = `
-      INSERT INTO medicines (name, category, unit_price, stock_quantity, expiry_date)
-      VALUES (?, ?, ?, ?, ?)
-    `;
-    const [result] = await query(sql, [
-      name.trim(),
-      category ? category.trim() : 'General',
-      price,
-      stock,
-      expiry_date
-    ]);
-
-    return this.getMedicineById(result.insertId);
-  }
-
-  /**
-   * Update an existing medicine
-   */
-  async updateMedicine(medicineId, { name, category, unit_price, stock_quantity, expiry_date }) {
-    const existing = await this.getMedicineById(medicineId);
-    if (!existing) {
-      const error = new Error(`Medicine with ID ${medicineId} not found.`);
-      error.statusCode = 404;
-      throw error;
-    }
-
-    const price = unit_price !== undefined ? parseFloat(unit_price) : existing.unit_price;
-    if (isNaN(price) || price < 0) {
-      const error = new Error('Unit price must be a non-negative number.');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const stock = stock_quantity !== undefined ? parseInt(stock_quantity, 10) : existing.stock_quantity;
-    if (!Number.isSafeInteger(stock) || stock < 0 || (stock_quantity !== undefined && String(stock_quantity).trim() !== String(stock))) {
-      const error = new Error('Stock quantity must be a non-negative integer.');
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const updatedName = name ? name.trim() : existing.name;
-    const updatedCategory = category ? category.trim() : existing.category;
-    const updatedExpiry = expiry_date || existing.expiry_date;
-
-    const sql = `
-      UPDATE medicines
-      SET name = ?, category = ?, unit_price = ?, stock_quantity = ?, expiry_date = ?
-      WHERE medicine_id = ?
-    `;
-    await query(sql, [updatedName, updatedCategory, price, stock, updatedExpiry, medicineId]);
-
-    return this.getMedicineById(medicineId);
-  }
-
-  /**
-   * Safe delete medicine
-   * Checks if medicine is referenced in reservation_items before deleting
-   */
-  async deleteMedicine(medicineId) {
-    const existing = await this.getMedicineById(medicineId);
-    if (!existing) {
-      const error = new Error(`Medicine with ID ${medicineId} not found.`);
-      error.statusCode = 404;
-      throw error;
-    }
-
-    // Check if referenced in reservation_items
-    const [refRows] = await query(
-      `SELECT COUNT(*) AS reservation_count FROM reservation_items WHERE medicine_id = ?`,
-      [medicineId]
-    );
-
-    if (Number(refRows[0].reservation_count) > 0) {
+    if (
+      data.unit_price === undefined ||
+      data.unit_price === null ||
+      String(data.unit_price).trim() === '' ||
+      !Number.isFinite(price) ||
+      price < 0
+    ) {
       const error = new Error(
-        `Cannot delete medicine '${existing.name}' because it is linked to ${refRows[0].reservation_count} reservation item(s). To preserve transaction and audit history, deletion is blocked.`
+        'Unit price must be a non-negative number.'
       );
-      error.statusCode = 409;
+      error.statusCode = 400;
       throw error;
     }
 
-    await query(`DELETE FROM medicines WHERE medicine_id = ?`, [medicineId]);
+    if (
+      data.stock_quantity === undefined ||
+      data.stock_quantity === null ||
+      String(data.stock_quantity).trim() === '' ||
+      !Number.isSafeInteger(stock) ||
+      stock < 0
+    ) {
+      const error = new Error(
+        'Stock quantity must be a non-negative integer.'
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const parsedDate = new Date(`${expiryDate}T00:00:00Z`);
+
+    if (
+      !/^\d{4}-\d{2}-\d{2}$/.test(expiryDate) ||
+      Number.isNaN(parsedDate.getTime()) ||
+      parsedDate.toISOString().slice(0, 10) !== expiryDate
+    ) {
+      const error = new Error(
+        'A valid expiry date (YYYY-MM-DD) is required.'
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+
     return {
-      message: `Medicine '${existing.name}' deleted successfully.`,
-      medicine_id: medicineId
+      name,
+      category: category || 'General',
+      unit_price: price,
+      stock_quantity: stock,
+      expiry_date: expiryDate
     };
   }
 
-  /**
-   * Get distinct categories
-   */
-  async getCategories() {
-    const [rows] = await query(
-      `SELECT DISTINCT category FROM medicines WHERE category IS NOT NULL AND category != '' ORDER BY category ASC`
+  // Shared SQL selection for medicine catalog
+  getMedicineSelectSQL() {
+    return `
+      SELECT
+        medicine_id,
+        name,
+        category,
+        unit_price,
+        stock_quantity,
+        TO_CHAR(expiry_date, 'YYYY-MM-DD') AS expiry_date,
+
+        CASE
+          WHEN expiry_date < CURRENT_DATE
+            THEN 'Expired'
+          WHEN expiry_date <= CURRENT_DATE + 30
+            THEN 'Near Expiry'
+          WHEN stock_quantity <= 0
+            THEN 'Out of Stock'
+          WHEN stock_quantity <= 10
+            THEN 'Low Stock'
+          ELSE 'In Stock'
+        END AS status,
+
+        (expiry_date - CURRENT_DATE) AS days_until_expiry
+
+      FROM public.medicines
+    `;
+  }
+
+  // Get medicines with search and filters
+  async getAllMedicines({
+    search = '',
+    category = '',
+    availability = 'all'
+  } = {}) {
+    let sql = this.getMedicineSelectSQL() + `
+      WHERE 1 = 1
+    `;
+
+    const params = [];
+
+    if (typeof search === 'string' && search.trim()) {
+      params.push(`%${search.trim()}%`);
+
+      sql += `
+        AND (
+          name ILIKE $${params.length}
+          OR category ILIKE $${params.length}
+        )
+      `;
+    }
+
+    if (
+      typeof category === 'string' &&
+      category.trim() &&
+      category.toLowerCase() !== 'all'
+    ) {
+      params.push(category.trim());
+
+      sql += `
+        AND category = $${params.length}
+      `;
+    }
+
+    if (availability === 'in_stock') {
+      sql += `
+        AND stock_quantity > 10
+        AND expiry_date > CURRENT_DATE + 30
+      `;
+    } else if (availability === 'low_stock') {
+      sql += `
+        AND stock_quantity BETWEEN 1 AND 10
+        AND expiry_date > CURRENT_DATE + 30
+      `;
+    } else if (availability === 'out_of_stock') {
+      sql += `
+        AND stock_quantity <= 0
+      `;
+    } else if (availability === 'expired') {
+      sql += `
+        AND expiry_date < CURRENT_DATE
+      `;
+    } else if (availability === 'near_expiry') {
+      sql += `
+        AND expiry_date >= CURRENT_DATE
+        AND expiry_date <= CURRENT_DATE + 30
+      `;
+    }
+
+    sql += ` ORDER BY name ASC, medicine_id ASC`;
+
+    const result = await pool.query(sql, params);
+    return result.rows;
+  }
+
+  // Get a medicine by ID
+  async getMedicineById(medicineId) {
+    const id = this.validateMedicineId(medicineId);
+
+    const sql = `
+      ${this.getMedicineSelectSQL()}
+      WHERE medicine_id = $1
+    `;
+
+    const result = await pool.query(sql, [id]);
+
+    return result.rows[0] || null;
+  }
+
+  // Create a new medicine
+  async createMedicine(data) {
+    const medicine = this.validateMedicineData(data);
+
+    const sql = `
+      INSERT INTO public.medicines (
+        name,
+        category,
+        unit_price,
+        stock_quantity,
+        expiry_date
+      )
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING medicine_id
+    `;
+
+    const result = await pool.query(sql, [
+      medicine.name,
+      medicine.category,
+      medicine.unit_price,
+      medicine.stock_quantity,
+      medicine.expiry_date
+    ]);
+
+    return this.getMedicineById(
+      result.rows[0].medicine_id
     );
-    return rows.map((r) => r.category);
+  }
+
+  // Update an existing medicine
+  async updateMedicine(medicineId, data) {
+    const id = this.validateMedicineId(medicineId);
+
+    const existing = await this.getMedicineById(id);
+
+    if (!existing) {
+      const error = new Error(
+        `Medicine with ID ${id} not found.`
+      );
+      error.statusCode = 404;
+      throw error;
+    }
+
+    const medicine = this.validateMedicineData({
+      name: data.name ?? existing.name,
+      category: data.category ?? existing.category,
+      unit_price: data.unit_price ?? existing.unit_price,
+      stock_quantity:
+        data.stock_quantity ?? existing.stock_quantity,
+      expiry_date: data.expiry_date ?? existing.expiry_date
+    });
+
+    const sql = `
+      UPDATE public.medicines
+      SET
+        name = $1,
+        category = $2,
+        unit_price = $3,
+        stock_quantity = $4,
+        expiry_date = $5
+      WHERE medicine_id = $6
+      RETURNING medicine_id
+    `;
+
+    const result = await pool.query(sql, [
+      medicine.name,
+      medicine.category,
+      medicine.unit_price,
+      medicine.stock_quantity,
+      medicine.expiry_date,
+      id
+    ]);
+
+    if (result.rowCount === 0) {
+      const error = new Error('Medicine not found.');
+      error.statusCode = 404;
+      throw error;
+    }
+
+    return this.getMedicineById(id);
+  }
+
+  // Delete a medicine only if it is not used in reservations
+  async deleteMedicine(medicineId) {
+    const id = this.validateMedicineId(medicineId);
+
+    const client = await pool.connect();
+
+    try {
+      await client.query('BEGIN');
+
+      const existingResult = await client.query(
+        `
+          SELECT medicine_id, name
+          FROM public.medicines
+          WHERE medicine_id = $1
+          FOR UPDATE
+        `,
+        [id]
+      );
+
+      const existing = existingResult.rows[0];
+
+      if (!existing) {
+        const error = new Error(
+          `Medicine with ID ${id} not found.`
+        );
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const references = await client.query(
+        `
+          SELECT COUNT(*)::integer AS reservation_count
+          FROM public.reservation_items
+          WHERE medicine_id = $1
+        `,
+        [id]
+      );
+
+      const reservationCount =
+        references.rows[0].reservation_count;
+
+      if (reservationCount > 0) {
+        const error = new Error(
+          `Cannot delete medicine '${existing.name}' because it is linked to ${reservationCount} reservation item(s).`
+        );
+        error.statusCode = 409;
+        throw error;
+      }
+
+      await client.query(
+        `
+          DELETE FROM public.medicines
+          WHERE medicine_id = $1
+        `,
+        [id]
+      );
+
+      await client.query('COMMIT');
+
+      return {
+        message: `Medicine '${existing.name}' deleted successfully.`,
+        medicine_id: id
+      };
+    } catch (error) {
+      await client.query('ROLLBACK');
+
+      if (error.code === '23503') {
+        error.statusCode = 409;
+        error.message =
+          'Cannot delete medicine because it is referenced by another record.';
+      }
+
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Get all medicine categories
+  async getCategories() {
+    const result = await pool.query(`
+      SELECT DISTINCT category
+      FROM public.medicines
+      WHERE category IS NOT NULL
+        AND TRIM(category) <> ''
+      ORDER BY category ASC
+    `);
+
+    return result.rows.map((row) => row.category);
   }
 }
 
