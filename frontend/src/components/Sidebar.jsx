@@ -56,7 +56,7 @@ export default function Sidebar({ activePage, setActivePage, isDbConnected, mobi
       <div className="sidebar-footer">
         <div className="status-indicator">
           <span className={`status-dot ${isDbConnected ? '' : 'offline'}`}></span>
-          <span>{isDbConnected ? 'MySQL: Connected' : 'MySQL: Disconnected'}</span>
+          <span>{isDbConnected ? 'PostgreSQL: Connected' : 'PostgreSQL: Disconnected'}</span>
         </div>
         <div style={{ fontSize: '0.72rem', color: '#64748b' }}>
           DBMS University Project v1.0

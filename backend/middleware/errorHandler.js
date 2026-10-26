@@ -4,8 +4,8 @@
 function errorHandler(err, req, res, next) {
   console.error('[Error Details]:', err);
 
-  // MySQL specific error codes
-  if (err.code === 'ER_DUP_ENTRY') {
+  // PostgreSQL SQLSTATE and legacy MySQL error codes
+  if (['23505', 'ER_DUP_ENTRY'].includes(err.code)) {
     return res.status(409).json({
       success: false,
       message: 'A record with this unique value (such as phone number or name) already exists.',
@@ -13,7 +13,7 @@ function errorHandler(err, req, res, next) {
     });
   }
 
-  if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+  if (['23503', 'ER_ROW_IS_REFERENCED_2'].includes(err.code)) {
     return res.status(409).json({
       success: false,
       message: 'Cannot delete or alter this record because other records (like reservations) depend on it.',

@@ -43,11 +43,11 @@ async function runTestSuite() {
   // Test 1: Database Connection
   const connCheck = await testConnection();
   if (!connCheck.connected) {
-    logTest(1, 'MySQL Database Connection', false, `Cannot connect: ${connCheck.message}`);
-    console.log('\n\x1b[33m[NOTE] Please ensure MySQL is running and DB_PASSWORD in backend/.env is correct.\x1b[0m\n');
+    logTest(1, 'PostgreSQL Database Connection', false, `Cannot connect: ${connCheck.message}`);
+    console.log('\n\x1b[33m[NOTE] Please verify PostgreSQL access and DATABASE_URL in backend/.env.\x1b[0m\n');
     process.exit(1);
   }
-  logTest(1, 'MySQL Database Connection', true, connCheck.message);
+  logTest(1, 'PostgreSQL Database Connection', true, connCheck.message);
 
   let testCustomer = null;
   let testMed1 = null;

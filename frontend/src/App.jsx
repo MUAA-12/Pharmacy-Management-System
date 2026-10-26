@@ -131,8 +131,8 @@ export default function App() {
             justifyContent: 'space-between'
           }}>
             <div>
-              <strong>MySQL Database Connection Alert:</strong> Backend cannot communicate with MySQL (<code>{dbErrorDetails || 'Access Denied / Not Running'}</code>).
-              Please ensure your MySQL service is running and verify <code>DB_PASSWORD</code> in <code>backend/.env</code>.
+              <strong>PostgreSQL Database Connection Alert:</strong> Backend cannot communicate with PostgreSQL (<code>{dbErrorDetails || 'Database connection unavailable'}</code>).
+              Please verify the backend <code>DATABASE_URL</code> and Supabase database availability.
             </div>
             <button className="btn btn-secondary btn-sm" onClick={checkHealth}>
               Retry Connection

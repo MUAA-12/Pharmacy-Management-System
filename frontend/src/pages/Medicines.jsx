@@ -237,7 +237,7 @@ export default function Medicines({ addToast }) {
             <span>Medicine Inventory Catalog ({medicines.length})</span>
           </h3>
           <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
-            Real-time synchronization with MySQL `medicines` table
+            Real-time synchronization with PostgreSQL `medicines` table
           </span>
         </div>
         <div className="table-responsive">

@@ -8,7 +8,7 @@
     "dev": "node --watch server.js",
     "test": "node tests/adapterTest.js && node tests/transactionTest.js"
   },
-  "keywords": ["pharmacy", "mysql", "express", "transactions", "dbms"],
+  "keywords": ["pharmacy", "postgresql", "express", "transactions", "dbms"],
   "author": "",
   "license": "ISC",
   "dependencies": {

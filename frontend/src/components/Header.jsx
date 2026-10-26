@@ -36,7 +36,7 @@ export default function Header({ pageTitle, pageSubtitle, onRefresh, isRefreshin
           className="btn btn-secondary btn-sm"
           onClick={onRefresh}
           disabled={isRefreshing}
-          title="Refresh live data from MySQL"
+          title="Refresh live data from PostgreSQL"
         >
           <span style={{ display: 'inline-block', transform: isRefreshing ? 'rotate(180deg)' : 'none', transition: 'transform 0.4s ease' }}>
             <IconRefresh size={16} />

@@ -409,7 +409,7 @@ export default function CreateReservation({ addToast, setActivePage, onOpenViewR
                 </div>
 
                 <div style={{ marginTop: 12, fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                  Allocates stock inside an atomic MySQL transaction with <code>FOR UPDATE</code> row locking.
+                  Allocates stock inside an atomic PostgreSQL transaction with <code>FOR UPDATE</code> row locking.
                 </div>
               </div>
             )}
